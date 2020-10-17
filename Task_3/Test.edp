@@ -1,0 +1,81 @@
+real[int,int] a(4, 4);
+a = [
+        [1, 0, 8, 0], 
+        [2, 5, 0, 2],
+        [0, 0, 7, 0],
+        [0, 3, 0, 1]
+    ];
+
+matrix A = a;
+
+real[int] xExact = [-41.0/7, -40.0/7, 6.0/7, 148.0/7]; 
+
+real[int] rhs = A*xExact;
+
+real[int] x = [0, 0, 0, 0];
+
+func real[int] BiCGStab(matrix& A, real[int]& rhs){
+
+	/* initiale guess */ 
+
+	real[int] x0 = [0, 0, 0, 0];   real[int] xtemp = x0;
+	real[int] r0 = A*x0;           r0 = rhs - r0; 
+	real[int] rtemp = r0;          real[int] r2 = r0;
+	real[int] p0 = x0; real[int] ptemp = p0;
+	real[int] z0 = r0; real[int] ztemp = z0;
+	real[int] s0 = r0;
+	real[int] v0 = x0; real[int] vtemp = v0;
+	real[int] t0 = x0;
+
+	real alpha0 = 1;  real alphatemp = 1;  
+	real betta0;
+	real po0 = 1; real potemp = 1;
+	real w0 = 1; real wtemp = 1;
+
+	func real norma(real[int]& x) {
+	    real k = 0;
+	    for(int i = 0; i < x.n; i++) {
+	        k = k + x[i]*x[i];
+	    }
+	    return sqrt(k);
+	}
+
+	real epsilon = 1e-3;
+	real error = norma(r0) / norma (rhs);
+	cout << "error = " << error << " epsilon = " << epsilon << endl;
+	int NoI = 0; //Number if uterarions
+	while ((error > epsilon) && (NoI < 100)){
+
+		po0 = (r2)'*rtemp;
+		betta0 = po0*alphatemp/(potemp*wtemp);
+		p0 = ptemp - wtemp*vtemp;
+		p0 = betta0*p0;
+		p0 = rtemp + p0;
+		v0 = A*p0;
+		alpha0 = po0/((r2)'*v0);
+		s0 = rtemp - alpha0*v0;
+		t0 = A*s0;
+		w0 = (t0)'*s0/((t0)'*t0);
+		x0 = w0*s0 + alpha0*p0;
+		x0 = xtemp + x0;
+		r0 = s0 - w0*t0;
+
+		potemp = po0;
+		xtemp = x0;
+		rtemp = r0;
+		ptemp = p0;
+		vtemp = v0;
+		wtemp = w0;
+		alphatemp = alpha0; 
+
+		error = norma(r0) / norma (rhs);
+		cout << "error =  " << error << endl;
+
+		NoI++;
+	}
+	x = x0;
+	return x;
+}
+
+BiCGStab(A,rhs);
+cout << "Numericsl solution: " << x << endl;
