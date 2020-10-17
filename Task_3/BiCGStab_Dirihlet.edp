@@ -1,0 +1,169 @@
+/* Domailn geometry */
+real Rout = 2.0; /* Radius of outter circle */
+real Rin = 1.0;  /* Radius of inner circle */
+
+/* Boundary condition */
+real uOut = 1.0;
+real uIn = 2.0; 
+
+/* Mesh definition */
+int NN = 50*2*2*2;
+int Nout = NN;
+int Nin = int(Rin / Rout * NN);
+
+int labelIn = 1; /* label of inner circle */
+int labelOut = 2; /* label of outter circle */
+
+/* Inner circle border definition */
+border GammaIn(t = 0.0, 2*pi){
+	x = Rin*cos(t);
+	y = Rin*sin(t); 
+	label = labelIn;
+}
+
+/* Outer circle border definition */
+border GammaOut(t = 0.0, 2*pi){
+	x = Rout*cos(t);
+	y = Rout*sin(t);
+	label = labelOut;
+}
+
+mesh Th = buildmesh(GammaOut(Nout) + GammaIn(-Nin));
+
+/* finite elements space definition */
+fespace Vh(Th, P1);
+Vh u, v; 
+
+/* Bilinear form definition */
+varf LaplaceBilinearForm(u,v) =
+	int2d(Th)(
+		dx(u)*dx(v) + dy(u)*dy(v)
+		)
+		+ on(labelIn, u = uIn)
+		+ on(labelOut, u = uOut);
+
+/* Linear form definition */
+varf RhsLinearForm(u,v) = 
+		 on(labelIn, u = uIn)
+		+ on(labelOut, u = uOut);
+
+real tgvv = 1e8;
+matrix A = LaplaceBilinearForm(Vh, Vh, tgv = tgvv);
+real[int] b = RhsLinearForm(0, Vh, tgv = tgvv);
+
+real[int] xn(b.n); 
+xn = 0;
+
+func real norma(real[int]& u) {
+	real sum = 0;
+	for(int i = 0; i < u.n; i++) {
+	sum = sum + u[i]*u[i];
+	}
+	return sqrt(sum);
+}
+
+func real[int] BiCGStab(matrix& A, real[int]& rhs){
+
+	/* initiale guess */ 
+	real[int] x0 = (b.n); 
+	x0 = 1.0;   
+	real[int] xtemp = x0;
+	real[int] r0 = A*x0;            
+	r0 = rhs - r0; 
+	real[int] rtemp = r0;           
+	real[int] r2 = r0;
+	real[int] p0(x0.n); 
+	p0 = 0; 				
+	real[int] ptemp = p0;
+	real[int] z0 = r0; 				
+	real[int] ztemp = z0;
+	real[int] s0 = r0;
+	real[int] v0 = (x0.n); 
+	v0 = 0;				
+	real[int] vtemp = v0;
+	real[int] t0 = x0;
+
+	real alpha0 = 1.0;  
+	real alphatemp = 1.0;  
+	real betta0;
+	real po0 = 1.0; 
+	real potemp = 1.0;
+	real w0 = 1.0; 
+	real wtemp = 1.0;
+
+	int NoI = 0; //Number if uterarions
+	real epsilon = 1e-10; 
+	real error = norma(r0) / norma(rhs);
+	
+
+	while ( (error > epsilon) ){ // ||(NoI < 1)
+
+		po0 = (r2)'*rtemp;
+		betta0 = po0*alphatemp/(potemp*wtemp);
+		p0 = ptemp - wtemp*vtemp;
+		p0 = betta0*p0;
+		p0 = rtemp + p0;
+		v0 = A*p0;
+		alpha0 = po0/((r2)'*v0);
+		s0 = rtemp - alpha0*v0;
+		t0 = A*s0;
+		w0 = (t0)'*s0/((t0)'*t0);
+		x0 = w0*s0 + alpha0*p0;
+		x0 = xtemp + x0;
+		r0 = s0 - w0*t0;
+
+		potemp = po0;
+		xtemp = x0;
+		rtemp = r0;
+		ptemp = p0;
+		vtemp = v0;
+		wtemp = w0;
+		alphatemp = alpha0; 
+
+		error = norma(r0) / norma(rhs);
+		cout << "error = " << error << endl;
+		NoI++;
+	}
+	xn = x0;
+	//cout << "error = " << error << " epsilon = " << epsilon << endl;
+	cout << "Number of iterations = " << NoI << endl;
+	return xn;
+}
+
+BiCGStab(A,b);
+u[] = xn;
+string plotTitle = "Laplace BiCGStab solution";
+plot(Th, u, fill = true, dim = 2, value = 1, nbiso = 30, cmm = plotTitle, wait = 1);
+
+/* Exact solution calculation */
+real C1 = ( uOut - uIn) / log(Rout/Rin);
+real C2 = uOut - C1*log(Rout);
+
+func uExactFunc = 0.5*C1*log(x*x + y^2) +C2;
+Vh uExact = uExactFunc; 
+
+string plotTitle2 = "Laplace exact solution";
+plot(Th, uExact, fill = true, dim = 2, value = 1, nbiso = 30, cmm = plotTitle2, wait = 1);
+
+load "MUMPS_seq";
+
+set(A,
+	solver = sparsesolver, // CG-solver// GMRES-solver// sparsesolver-solver// LU-solver//Cholesky-solver
+	eps = 1e-5, // tolerance: relative residual if positive. absolute residual if negative
+	strategy = 1
+);
+
+Vh uMUMPS;
+uMUMPS[] = A^-1*b;
+
+string plotTitle3 = "Laplace MUMPS_seq solution";
+plot(Th, uMUMPS, fill = true, dim = 2, value = 1, nbiso = 30, cmm = plotTitle3);
+
+Vh uMUMPSErrorAbs = abs(uMUMPS - uExact);
+Vh uErrorAbs = abs(u - uExact);
+
+real uErrorMUMPS = sqrt(int2d(Th)(uMUMPSErrorAbs^2));
+real uError = sqrt(int2d(Th)(uErrorAbs^2));
+
+cout << "||uMUMPS - uExact||L2 = " << uErrorMUMPS << endl;
+cout << "||uBiCGStab - uExact||L2 = " << uError << endl;
