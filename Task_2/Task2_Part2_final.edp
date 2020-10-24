@@ -97,7 +97,7 @@ for (int i = 0; i < 4; i++){
 
 	for(real j = 0; j <= k; j=j+1){
 		{
-			p = sqrt( (x0 + (x1-x0)*j/k)^2 + (y0 + (y1-y0)*j/k)^2 );
+			p = sqrt( ((x1-x0)*j/k)^2 + ((y1-y0)*j/k)^2 );
 			foutexact << p << " " << uExact(x0 + (x1-x0)*j/k, y0 + (y1-y0)*j/k)<< endl; 
 		}
 
