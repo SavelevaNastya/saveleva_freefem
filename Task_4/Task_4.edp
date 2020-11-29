@@ -1,0 +1,137 @@
+load "iovtk"
+system("mkdir .\\Sol\\");
+
+real H = 4;
+real L = 8;
+real R = 0.3;
+
+real mu = 0.1; /* [Pa*s] dynamic viscosity */
+real rho = 500; /* [kg/m^3] density */
+
+int labelIn = 1; 
+int labelRight = 2;
+int labelLeft = 3;
+int labelUp = 4;
+int labelDown = 5;
+
+real x0 = 2.5;
+real y0 = 2;
+
+int NN = 10;
+
+border GammaIn(t = 0, 2 * pi){
+    x = x0 + R * cos(t); 
+    y = y0 + R * sin(t); 
+    label = labelIn;
+}
+
+border Up(t = 0, L){
+    x = L - t; 
+    y = H; 
+    label = labelUp;
+}
+
+border Down(t = 0, L){
+    x = t; 
+    y = 0; 
+    label = labelDown;
+}
+
+border Left(t = 0, H){
+    x = L; 
+    y = t; 
+    label = labelLeft;
+}
+
+border Right(t = 0, H){
+    x = 0; 
+    y = H - t; 
+    label = labelRight;
+}
+
+mesh Th = buildmesh( Right(2 * NN) + Up(2 * NN) + Left(2 * NN) + Down(2 * NN) + GammaIn(-3 * NN) );
+
+//plot(Th);
+
+real penalty = 1e-10; 
+
+real p0 = 0;/* [Pa] */
+
+real t = 0.0;
+real dt = 0.1;/* [s] */
+real T = 50;/* [s] */
+real u0 = 1;/* [m/s] */
+real epsilon = 0.05;
+
+/* Differential operators */
+macro grad(u) [dx(u), dy(u)]//EOM
+macro div(u, v) (dx(u) + dy(v))//EOM
+macro Grad(u1,v1) ( dx(u1)*dx(v1) + dy(u1)*dy(v1))//EOM
+
+/* Fespace definition */
+fespace Vh(Th,[P2, P2, P1]);
+fespace Vh1(Th, P1);
+
+Vh [u, v, p]; 
+Vh [uh, vh, ph];
+Vh [uPrev, vPrev, pPrev]; 
+
+real uin = u0;
+
+[u, v, p] = [0, 0, 0];
+
+problem NSeq(u, v, p, uh, vh, ph) 
+	= 
+	int2d(Th)(
+		  rho / dt * [u, v]' * [uh, vh]
+		+ mu * ( Grad(u,uh) + Grad(v,vh) )
+		- p * div(uh, vh) 
+		- ph * div(u, v)
+		- penalty * p * ph
+		)
+
+	+ int2d(Th)(
+			- rho / dt * [convect([uPrev, vPrev], -dt, uPrev), convect([uPrev, vPrev], -dt, vPrev)]' * [uh, vh]
+		)
+
+	+ on(labelLeft, u = uin, v = 0)
+	+ on(labelUp, u = 0, v = 0)
+	+ on(labelDown, u = 0, v = 0)
+	+ on(labelIn, u = 0, v = 0)
+	+ on(labelRight, u = uPrev, v = 0, p = 0);
+
+int[int] order = [1];
+
+real error = 0.01;
+real hmin = 0.01;
+real hmax = 0.1;
+
+//time loop
+for ( int i = 0; i < T/dt; i++ ){
+
+	uin = u0 + epsilon * sin(t) * cos( y / H);
+
+	//adaptmesh loop
+	if ( (i > 0) && (i % 5 == 0) ){
+
+		//error = error/2.0;
+
+		Th = adaptmesh(Th, [u, v, p], err = error, hmin = hmin, hmax = hmax , nbvx = 10000);
+		[u, v, p] = [u, v, p];
+		[uPrev, vPrev, pPrev] = [uPrev, vPrev, pPrev];
+	}
+	//update
+	[uPrev, vPrev, pPrev] = [u, v, p];
+
+	//solve
+	NSeq;
+	
+	plot(u, v, dim = 2, value = 1,  nbiso = 50, fill = 1, cmm="iter = "+i);
+	
+	t = t + dt;
+	Vh1 uP1 = u;
+	Vh1 vP1 = v;
+
+	savevtk("./Sol/sol" + t + ".vtu", Th, dataname = "vel", [uP1, vP1], order = order);
+	
+}
