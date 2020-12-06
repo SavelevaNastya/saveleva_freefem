@@ -17,7 +17,7 @@ int labelDown = 5;
 real x0 = 2.5;
 real y0 = 2;
 
-int NN = 10;
+int NN = 30;
 
 border GammaIn(t = 0, 2 * pi){
     x = x0 + R * cos(t); 
@@ -51,7 +51,7 @@ border Right(t = 0, H){
 
 mesh Th = buildmesh( Right(2 * NN) + Up(2 * NN) + Left(2 * NN) + Down(2 * NN) + GammaIn(-3 * NN) );
 
-//plot(Th);
+plot(Th);
 
 real penalty = 1e-10; 
 
@@ -60,8 +60,12 @@ real p0 = 0;/* [Pa] */
 real t = 0.0;
 real dt = 0.1;/* [s] */
 real T = 50;/* [s] */
-real u0 = 1;/* [m/s] */
 real epsilon = 0.05;
+real u0 = 1; 
+
+func real uin(real & t){
+	return u0 + epsilon * sin(t) * cos( y / H);
+}
 
 /* Differential operators */
 macro grad(u) [dx(u), dy(u)]//EOM
@@ -71,12 +75,12 @@ macro Grad(u1,v1) ( dx(u1)*dx(v1) + dy(u1)*dy(v1))//EOM
 /* Fespace definition */
 fespace Vh(Th,[P2, P2, P1]);
 fespace Vh1(Th, P1);
+fespace Vhw(Th, P2b);
 
 Vh [u, v, p]; 
 Vh [uh, vh, ph];
 Vh [uPrev, vPrev, pPrev]; 
-
-real uin = u0;
+Vhw w;
 
 [u, v, p] = [0, 0, 0];
 
@@ -94,11 +98,11 @@ problem NSeq(u, v, p, uh, vh, ph)
 			- rho / dt * [convect([uPrev, vPrev], -dt, uPrev), convect([uPrev, vPrev], -dt, vPrev)]' * [uh, vh]
 		)
 
-	+ on(labelLeft, u = uin, v = 0)
+	+ on(labelLeft, u = uin(t), v = 0)
 	+ on(labelUp, u = 0, v = 0)
 	+ on(labelDown, u = 0, v = 0)
 	+ on(labelIn, u = 0, v = 0)
-	+ on(labelRight, u = uPrev, v = 0, p = 0);
+	+ on(labelRight, u = w, v = 0, p = 0);
 
 int[int] order = [1];
 
@@ -109,16 +113,21 @@ real hmax = 0.1;
 //time loop
 for ( int i = 0; i < T/dt; i++ ){
 
-	uin = u0 + epsilon * sin(t) * cos( y / H);
+	t = t + dt;
+
+	//uin = u0 + epsilon * sin(t) * cos( y / H);
+
+	w = convect( [u,v], -dt, uPrev ); /* for condition du/dt */
 
 	//adaptmesh loop
 	if ( (i > 0) && (i % 5 == 0) ){
 
 		//error = error/2.0;
 
-		Th = adaptmesh(Th, [u, v, p], err = error, hmin = hmin, hmax = hmax , nbvx = 10000);
+		Th = adaptmesh(Th, [u, v], err = error, hmin = hmin, hmax = hmax , nbvx = 10000);
 		[u, v, p] = [u, v, p];
-		[uPrev, vPrev, pPrev] = [uPrev, vPrev, pPrev];
+		//[uPrev, vPrev, pPrev] = [uPrev, vPrev, pPrev];
+		plot(Th, wait = 0);
 	}
 	//update
 	[uPrev, vPrev, pPrev] = [u, v, p];
@@ -128,7 +137,6 @@ for ( int i = 0; i < T/dt; i++ ){
 	
 	plot(u, v, dim = 2, value = 1,  nbiso = 50, fill = 1, cmm="iter = "+i);
 	
-	t = t + dt;
 	Vh1 uP1 = u;
 	Vh1 vP1 = v;
 
