@@ -63,8 +63,8 @@ real T = 50;/* [s] */
 real epsilon = 0.05;
 real u0 = 1; 
 
-func real uin(real & t){
-	return u0 + epsilon * sin(t) * cos( y / H);
+func real uin(real & coord, real & t){
+	return u0 + epsilon * sin(t) * cos( coord / H);
 }
 
 /* Differential operators */
@@ -98,7 +98,7 @@ problem NSeq(u, v, p, uh, vh, ph)
 			- rho / dt * [convect([uPrev, vPrev], -dt, uPrev), convect([uPrev, vPrev], -dt, vPrev)]' * [uh, vh]
 		)
 
-	+ on(labelLeft, u = uin(t), v = 0)
+	+ on(labelLeft, u = uin(y,t), v = 0)
 	+ on(labelUp, u = 0, v = 0)
 	+ on(labelDown, u = 0, v = 0)
 	+ on(labelIn, u = 0, v = 0)
