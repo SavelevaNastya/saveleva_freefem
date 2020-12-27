@@ -1,0 +1,43 @@
+ real[int] xdelta = [pi, pi];//  coord x de delta_i
+ real[int] ydelta = [pi, pi];//  coord x de delta_j
+ real[int] cdelta=[1.0, 1.0];//  coef delta_i
+
+/* Mesh definition */
+int NN = 100;
+
+int labelRight = 1; /* label of outter right side of square */
+int labelUp = 2; /* label of outter up side of square */
+int labelLeft = 3; /* label of outter left side of square */
+int labelDown = 4; /* label of outter down side of square */
+
+
+/* Outer border definition */
+border Down(t = 0,1){x = 2 * pi * t; y = 0; label = labelDown;} 
+border Right(t = 0,1){x = 2 * pi; y = 2 * pi * t; label = labelRight;}
+border Up(t = 0,1){x = 2 * pi - 2 * pi * t; y = 2 * pi; label = labelUp;}
+border Left(t = 0,1){x = 0; y = 2 * pi - 2 * pi * t; label = labelLeft;}
+
+mesh Th = buildmesh(Down(NN) + Right(NN) + Up(NN) + Left(NN));
+
+plot(Th, wait = 1);
+
+fespace Vh(Th, P1);
+
+Vh u, v; 
+
+matrix D = interpolate(Vh,xdelta,ydelta); // the interpolation matrix  
+
+Vh b;
+b[] = D * cdelta;
+b[] = -b[];
+
+solve Poissonequation(u,v) =                          
+    int2d(Th)( dx(u) * dx(v) + dy(u) * dy(v) )   // bilinear form
+  	+ b[]                                    // linear form of the rhs (so an array)
+  	+ on( labelRight, labelLeft, u = 0 )     // boundary condition form
+  	+int1d(Th,labelDown)((dx(u) * N.x + dy(u) * N.y) * v)
+  	+int1d(Th,labelUp)((dx(u) * N.x + dy(u) * N.y) * v) ;    
+
+ Poissonequation; 
+
+plot(Th, u, fill = true, dim = 3, value = 1, nbiso = 30);
